@@ -1,4 +1,7 @@
+#main helmholz source: http://www.iapws.org/relguide/IAPWS95-2018.pdf
+#auxiliary functions source: #http://www.teos-10.org/pubs/Wagner_and_Pruss_2002.pdf
 using ForwardDiff
+
 function _p0exp(T) #Vapor–pressure equation, eq 2.5, #SI units
 
     d=1-T/647.096
@@ -18,7 +21,10 @@ function _rholsatexp(T) #Saturated liquid density equation, eq 2.6, #SI units
     return 322*(1.0+b[1]*d^(1.0/3.0)+b[2]*d^(2.0/3.0)+b[3]*d^(5.0/3.0)+b[4]*d^(16.0/3.0)+b[5]*d^(43.0/3.0)+b[6]*d^(110.0/3.0))
     
 end
-@inline function waterf0(delta,tau)
+@inline function waterf0(delta,tau) #ideal helmholtz
+    
+#delta = rho/rhoc,
+#tau = Tc/T
     
     n= [-8.3204464837497, 6.6832105275932, 3.00632,0.012436, 0.97315, 1.2795, 0.96956, 0.24873]
     gamma = [0, 0, 0, 1.28728967, 3.53734222, 7.74073708, 9.24437796,27.5075105]
@@ -30,8 +36,10 @@ end
     return res
 end
 
-@inline function waterfr(delta,tau)
-  
+@inline function waterfr(delta,tau) #residual helmholtz
+
+#delta = rho/rhoc,
+#tau = Tc/T
 
     nr1 = [0.12533547935523e-1, 0.78957634722828e1, -0.87803203303561e1,
     0.31802509345418, -0.26145533859358, -0.78199751687981e-2,
@@ -104,25 +112,24 @@ end
         return res
 end
 
-waterf(rho,T) = (waterfr(rho/322.0,647.096/T)+waterf0(rho/322.0,647.096/T))
+waterf(rho,T) = (waterfr(rho/322.0,647.096/T)+waterf0(rho/322.0,647.096/T)) #total helmholtz function
 
 
-#delta = rho/rhoc,
-#tau = Tc/T
-#probable exportation of future helmholtz interfase
-Hemholtz(pvtxstate) = waterf(1/pvtxstate[2],pvtxstate[3])
 
-function dwaterf(rho,T)
+#probable exportation of future helmholtz interfase for lavoisier
+#Hemholtz(pvtxstate) = waterf(1/pvtxstate[2],pvtxstate[3])
+
+function dwaterf(rho,T) #derivative of total helmholtz function
     d = [rho/322.0,647.096/T]
     f(d) = waterf(d[1],d[2])
     return ForwardDiff.gradient(f,d)
-
 end 
 
-function dwaterfr(rho,T)
+function dwaterfr(rho,T) #derivative of residual helmholtz function
     d = [rho/322.0,647.096/T]
     f(d) = waterfr(d[1],d[2])
     return ForwardDiff.gradient(f,d)
 end 
 
-pressure(rho,T) = rho*0.46151805*1000*T*(1+(rho/322.0)*dwaterfr(rho,T)[1]) #in Pa
+#pressure of water, using density (kg/m3) and Temperature(K), in Pa
+pressure(rho,T) = rho*0.46151805*1000*T*(1+(rho/322.0)*dwaterfr(rho,T)[1])
